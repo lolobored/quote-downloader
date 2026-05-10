@@ -10,11 +10,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import org.apache.commons.io.FileUtils;
 import org.lolobored.quotedownloader.model.Quote;
 import org.lolobored.quotedownloader.model.config.Provider;
@@ -133,8 +128,8 @@ public class QuoteDownloaderApplication implements ApplicationRunner {
 
     final int finalBrowserType = browserType;
     final File finalScreenshotsDirectory = screenshotsDirectory;
-    List<Callable<List<Quote>>> tasks = new ArrayList<>();
-    List<String> taskProviderNames = new ArrayList<>();
+    List<Quote> quotes = new ArrayList<>();
+    List<String> failures = new ArrayList<>();
 
     for (Provider provider : providers) {
       if (!provider.isEnabled()) {
@@ -147,44 +142,18 @@ public class QuoteDownloaderApplication implements ApplicationRunner {
         continue;
       }
 
-      taskProviderNames.add(provider.getName());
       final boolean finalHeaded = headed;
-      tasks.add(
-          () -> {
-            WebDriver driver = createWebDriver(finalBrowserType, finalHeaded);
-            try {
-              return service.fetchQuotes(driver, provider);
-            } catch (Exception e) {
-              saveErrorScreenshot(driver, provider.getName(), finalScreenshotsDirectory);
-              throw e;
-            } finally {
-              driver.quit();
-            }
-          });
-    }
-
-    boolean sequential = args.containsOption("sequential");
-    ExecutorService executor =
-        sequential ? Executors.newSingleThreadExecutor() : Executors.newCachedThreadPool();
-    List<Future<List<Quote>>> futures;
-    try {
-      futures = executor.invokeAll(tasks);
-    } finally {
-      executor.shutdown();
-    }
-
-    List<Quote> quotes = new ArrayList<>();
-    List<String> failures = new ArrayList<>();
-    for (int i = 0; i < futures.size(); i++) {
-      String providerName = taskProviderNames.get(i);
+      WebDriver driver = createWebDriver(finalBrowserType, finalHeaded);
       try {
-        quotes.addAll(futures.get(i).get());
-      } catch (ExecutionException e) {
-        Throwable cause = e.getCause();
-        String msg =
-            cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
-        failures.add(providerName + ": " + msg);
-        logger.error("Provider [{}] failed", providerName, cause);
+        List<Quote> providerQuotes = service.fetchQuotes(driver, provider);
+        quotes.addAll(providerQuotes);
+      } catch (Exception e) {
+        saveErrorScreenshot(driver, provider.getName(), finalScreenshotsDirectory);
+        String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+        failures.add(provider.getName() + ": " + msg);
+        logger.error("Provider [{}] failed", provider.getName(), e);
+      } finally {
+        driver.quit();
       }
     }
 
