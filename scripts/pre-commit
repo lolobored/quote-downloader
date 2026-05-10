@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+JAVA_HOME="$HOME/.sdkman/candidates/java/17.0.15-amzn" \
+  PATH="$HOME/.sdkman/candidates/java/17.0.15-amzn/bin:$PATH" \
+  ./gradlew spotlessApply
+git add -u

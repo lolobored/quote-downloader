@@ -1,0 +1,38 @@
+[
+  {
+    "name": "yahoo",
+    "funds": [
+      {"fundId": "D05.SI", "fundName": "DBS Group Holdings", "currency": "SGD"},
+      {"fundId": "O39.SI", "fundName": "OCBC Bank", "currency": "SGD"},
+      {"fundId": "Z74.SI", "fundName": "Singtel", "currency": "SGD"},
+      {"fundId": "U11.SI", "fundName": "UOB Bank", "currency": "SGD"}
+    ]
+  },
+  {
+    "name": "great eastern",
+    "connectionUrl": "https://www.greateasternlife.com/sg/en/personal-insurance/my-account/login.html",
+    "bitwardenItemName": "Great Eastern",
+    "waitTime": 120,
+    "funds": [
+      {"fundId": "FUND_CODE_HERE", "fundName": "My Great Eastern Fund", "currency": "SGD"}
+    ]
+  },
+  {
+    "name": "ocbc",
+    "connectionUrl": "https://internet.ocbc.com/internet-banking/digital/web/sg/cfo/login/login",
+    "bitwardenItemName": "internet.ocbc.com",
+    "waitTime": 120,
+    "funds": [
+      {"fundId": "FUND_CODE_HERE", "fundName": "My OCBC Fund", "currency": "SGD"}
+    ]
+  },
+  {
+    "name": "royal london",
+    "connectionUrl": "https://www.royallondon.com/log-in/",
+    "bitwardenItemName": "Royal London",
+    "waitTime": 120,
+    "funds": [
+      {"fundId": "ISIN_OR_FUND_CODE_HERE", "fundName": "My Royal London Fund", "currency": "GBP"}
+    ]
+  }
+]
