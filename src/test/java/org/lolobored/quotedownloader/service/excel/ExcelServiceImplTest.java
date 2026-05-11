@@ -9,10 +9,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -116,13 +118,71 @@ class ExcelServiceImplTest {
     String yesterday =
         LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     service.writeQuotes(quotes(58.77), providers(), outputFile);
-    // Simulate the existing row belonging to yesterday so today creates a new row
     overwriteDateInHistory(yesterday);
     service.writeQuotes(quotes(59.00), providers(), outputFile);
 
     try (Workbook wb = open(outputFile)) {
       Sheet hist = wb.getSheet(thisMonth);
       assertThat(hist.getLastRowNum()).isEqualTo(2);
+    }
+  }
+
+  @Test
+  void writeQuotes_multipleDays_newestRowAtTop() throws Exception {
+    String yesterday =
+        LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+    service.writeQuotes(quotes(58.77), providers(), outputFile);
+    overwriteDateInHistory(yesterday);
+    service.writeQuotes(quotes(59.00), providers(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(0).getStringCellValue()).isEqualTo(today);
+      assertThat(hist.getRow(2).getCell(0).getStringCellValue()).isEqualTo(yesterday);
+    }
+  }
+
+  @Test
+  void writeQuotes_mergesProviderCellsForSameProvider() throws Exception {
+    service.writeQuotes(twoQuotesSameProvider(), providersWithTwoFunds(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      List<CellRangeAddress> merged = hist.getMergedRegions();
+      assertThat(merged).hasSize(1);
+      CellRangeAddress region = merged.get(0);
+      assertThat(region.getFirstRow()).isEqualTo(1);
+      assertThat(region.getLastRow()).isEqualTo(2);
+      assertThat(region.getFirstColumn()).isEqualTo(1);
+      assertThat(region.getLastColumn()).isEqualTo(1);
+    }
+  }
+
+  @Test
+  void writeQuotes_thinBorderBetweenProviderGroups() throws Exception {
+    service.writeQuotes(twoQuotesDifferentProviders(), twoProviders(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(0).getCellStyle().getBorderBottom())
+          .isEqualTo(BorderStyle.THIN);
+      assertThat(hist.getRow(2).getCell(0).getCellStyle().getBorderBottom())
+          .isNotEqualTo(BorderStyle.THIN);
+    }
+  }
+
+  @Test
+  void writeQuotes_mediumBorderBetweenDays() throws Exception {
+    String yesterday =
+        LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+    service.writeQuotes(quotes(58.77), providers(), outputFile);
+    overwriteDateInHistory(yesterday);
+    service.writeQuotes(quotes(59.00), providers(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(0).getCellStyle().getBorderBottom())
+          .isEqualTo(BorderStyle.MEDIUM);
     }
   }
 
@@ -162,6 +222,60 @@ class ExcelServiceImplTest {
     p.setName("yahoo");
     p.setFunds(List.of(f));
     return List.of(p);
+  }
+
+  private List<Quote> twoQuotesSameProvider() {
+    Quote q1 =
+        new Quote(
+            "DBS Group Holdings", "D05.SI", BigDecimal.valueOf(58.77), "SGD", LocalDate.now());
+    q1.setProviderName("yahoo");
+    Quote q2 = new Quote("OCBC Bank", "O39.SI", BigDecimal.valueOf(15.50), "SGD", LocalDate.now());
+    q2.setProviderName("yahoo");
+    return List.of(q1, q2);
+  }
+
+  private List<Provider> providersWithTwoFunds() {
+    Fund f1 = new Fund();
+    f1.setFundId("D05.SI");
+    f1.setFundName("DBS Group Holdings");
+    f1.setCurrency("SGD");
+    Fund f2 = new Fund();
+    f2.setFundId("O39.SI");
+    f2.setFundName("OCBC Bank");
+    f2.setCurrency("SGD");
+    Provider p = new Provider();
+    p.setName("yahoo");
+    p.setFunds(List.of(f1, f2));
+    return List.of(p);
+  }
+
+  private List<Quote> twoQuotesDifferentProviders() {
+    Quote q1 =
+        new Quote(
+            "DBS Group Holdings", "D05.SI", BigDecimal.valueOf(58.77), "SGD", LocalDate.now());
+    q1.setProviderName("yahoo");
+    Quote q2 =
+        new Quote("GreatLink Fund", "GEV001", BigDecimal.valueOf(0.89), "SGD", LocalDate.now());
+    q2.setProviderName("great eastern");
+    return List.of(q1, q2);
+  }
+
+  private List<Provider> twoProviders() {
+    Fund f1 = new Fund();
+    f1.setFundId("D05.SI");
+    f1.setFundName("DBS Group Holdings");
+    f1.setCurrency("SGD");
+    Provider p1 = new Provider();
+    p1.setName("yahoo");
+    p1.setFunds(List.of(f1));
+    Fund f2 = new Fund();
+    f2.setFundId("GEV001");
+    f2.setFundName("GreatLink Fund");
+    f2.setCurrency("SGD");
+    Provider p2 = new Provider();
+    p2.setName("great eastern");
+    p2.setFunds(List.of(f2));
+    return List.of(p1, p2);
   }
 
   private void overwriteDateInHistory(String newDate) throws Exception {

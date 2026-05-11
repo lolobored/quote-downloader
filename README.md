@@ -81,18 +81,25 @@ Providers run sequentially. SMS OTP codes are prompted interactively on the term
 
 ## Excel output
 
-`quotes.xlsx` contains one sheet per calendar month (`yyyy-MM`), never pruned:
+`quotes.xlsx` contains one sheet per calendar month (`yyyy-MM`), never pruned. Each daily run inserts a new block of rows **at the top** so the latest data is always visible first:
 
 | Date | Provider | Fund Name | Ticker | Price | Currency |
 |---|---|---|---|---|---|
-| 2026-05-01 | yahoo | DBS Group Holdings | D05.SI | 38.50 | SGD |
-| 2026-05-01 | great eastern | GreatLink Multi-Sector Income | GEV001 | 0.8901 | SGD |
 | 2026-05-11 | yahoo | DBS Group Holdings | D05.SI | 39.10 | SGD |
+| 2026-05-11 | yahoo | OCBC Bank | O39.SI | 15.50 | SGD |
+| 2026-05-11 | great eastern | GreatLink Multi-Sector Income | GEV001 | 0.8901 | SGD |
+| 2026-05-01 | yahoo | DBS Group Holdings | D05.SI | 38.50 | SGD |
+| 2026-05-01 | great eastern | GreatLink Multi-Sector Income | GEV001 | 0.8750 | SGD |
 
-- All columns have an **autofilter** so you can slice by provider, fund, or date range directly in Excel
-- Running multiple times on the same day **updates** the existing row rather than adding duplicates
-- Funds added or removed from the config simply appear or stop appearing in future rows
-- The long format is directly usable in pivot tables, charting tools, and data analysis libraries (pandas, R, etc.)
+Visual structure within each sheet:
+
+- **Provider column** — consecutive rows sharing the same provider are merged into one cell, centred and highlighted in light blue
+- **Provider separator** — a thin horizontal line between provider groups within the same day
+- **Day separator** — a medium horizontal line between each day's block and the one below it
+- **Price colour** — green background when the price is up vs the previous day, red when down
+- **Autofilter** on all columns — slice by provider, fund, or date range directly in Excel
+
+Running multiple times on the same day **updates** the existing rows rather than adding duplicates. Funds added or removed from the config simply appear or stop appearing in future runs.
 
 ## Building from source
 
