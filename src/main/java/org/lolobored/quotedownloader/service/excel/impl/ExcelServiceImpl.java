@@ -72,7 +72,9 @@ public class ExcelServiceImpl implements ExcelService {
     String monthName = LocalDate.now().format(MONTH_FORMATTER);
     String today = LocalDate.now().format(DATE_FORMATTER);
     CellStyle headerStyle = buildHeaderStyle(workbook);
-    CellStyle priceStyle = buildPriceStyle(workbook);
+    CellStyle priceStyle = buildPriceStyle(workbook, IndexedColors.AUTOMATIC);
+    CellStyle priceUpStyle = buildPriceStyle(workbook, IndexedColors.LIGHT_GREEN);
+    CellStyle priceDownStyle = buildPriceStyle(workbook, IndexedColors.ROSE);
 
     Sheet sheet = workbook.getSheet(monthName);
     if (sheet == null) {
@@ -88,14 +90,21 @@ public class ExcelServiceImpl implements ExcelService {
     }
 
     // Build upsert map: "date|ticker" -> row index
+    // Also track most recent previous price per ticker (last row before today)
     Map<String, Integer> rowByKey = new HashMap<>();
+    Map<String, Double> lastPriceByTicker = new HashMap<>();
     for (int i = 1; i <= sheet.getLastRowNum(); i++) {
       Row row = sheet.getRow(i);
       if (row == null) continue;
       Cell dateCell = row.getCell(HCOL_DATE);
       Cell tickerCell = row.getCell(HCOL_TICKER);
-      if (dateCell != null && tickerCell != null) {
-        rowByKey.put(dateCell.getStringCellValue() + "|" + tickerCell.getStringCellValue(), i);
+      Cell priceCell = row.getCell(HCOL_PRICE);
+      if (dateCell == null || tickerCell == null || priceCell == null) continue;
+      String date = dateCell.getStringCellValue();
+      String ticker = tickerCell.getStringCellValue();
+      rowByKey.put(date + "|" + ticker, i);
+      if (!date.equals(today)) {
+        lastPriceByTicker.put(ticker, priceCell.getNumericCellValue());
       }
     }
 
@@ -115,10 +124,21 @@ public class ExcelServiceImpl implements ExcelService {
         row.createCell(HCOL_CURRENCY).setCellValue(quote.getCurrency());
         rowByKey.put(key, row.getRowNum());
       }
+      double newPrice = quote.getPrice().doubleValue();
       Cell priceCell = row.getCell(HCOL_PRICE);
       if (priceCell == null) priceCell = row.createCell(HCOL_PRICE);
-      priceCell.setCellValue(quote.getPrice().doubleValue());
-      priceCell.setCellStyle(priceStyle);
+      priceCell.setCellValue(newPrice);
+
+      Double prev = lastPriceByTicker.get(quote.getTickerOrId());
+      if (prev == null) {
+        priceCell.setCellStyle(priceStyle);
+      } else if (newPrice > prev) {
+        priceCell.setCellStyle(priceUpStyle);
+      } else if (newPrice < prev) {
+        priceCell.setCellStyle(priceDownStyle);
+      } else {
+        priceCell.setCellStyle(priceStyle);
+      }
     }
 
     for (int col = 0; col < HISTORY_HEADERS.length; col++) {
@@ -174,9 +194,13 @@ public class ExcelServiceImpl implements ExcelService {
     return style;
   }
 
-  private CellStyle buildPriceStyle(Workbook workbook) {
+  private CellStyle buildPriceStyle(Workbook workbook, IndexedColors background) {
     CellStyle style = workbook.createCellStyle();
     style.setDataFormat(workbook.createDataFormat().getFormat("#,##0.0000"));
+    if (background != IndexedColors.AUTOMATIC) {
+      style.setFillForegroundColor(background.getIndex());
+      style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+    }
     return style;
   }
 }
