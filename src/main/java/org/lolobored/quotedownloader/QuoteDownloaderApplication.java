@@ -143,17 +143,19 @@ public class QuoteDownloaderApplication implements ApplicationRunner {
       }
 
       final boolean finalHeaded = headed;
-      WebDriver driver = createWebDriver(finalBrowserType, finalHeaded);
+      WebDriver driver =
+          service.requiresWebDriver() ? createWebDriver(finalBrowserType, finalHeaded) : null;
       try {
         List<Quote> providerQuotes = service.fetchQuotes(driver, provider);
         quotes.addAll(providerQuotes);
       } catch (Exception e) {
-        saveErrorScreenshot(driver, provider.getName(), finalScreenshotsDirectory);
+        if (driver != null)
+          saveErrorScreenshot(driver, provider.getName(), finalScreenshotsDirectory);
         String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
         failures.add(provider.getName() + ": " + msg);
         logger.error("Provider [{}] failed", provider.getName(), e);
       } finally {
-        driver.quit();
+        if (driver != null) driver.quit();
       }
     }
 
