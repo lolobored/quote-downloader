@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -35,9 +36,24 @@ import org.springframework.stereotype.Service;
 public class ExcelServiceImpl implements ExcelService {
 
   private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+  private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
+  private static final Pattern CURRENT_PRICES_SHEET = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+
   private static final String[] HEADERS = {
     "Provider", "Name", "Ticker / ID", "Price", "Currency", "Date"
   };
+
+  private static final String[] HISTORY_HEADERS = {
+    "Date", "Provider", "Fund Name", "Ticker", "Price", "Currency"
+  };
+
+  // History column indices
+  private static final int HCOL_DATE = 0;
+  private static final int HCOL_PROVIDER = 1;
+  private static final int HCOL_NAME = 2;
+  private static final int HCOL_TICKER = 3;
+  private static final int HCOL_PRICE = 4;
+  private static final int HCOL_CURRENCY = 5;
 
   // Column indices
   private static final int COL_PROVIDER = 0;
@@ -102,9 +118,15 @@ public class ExcelServiceImpl implements ExcelService {
       Sheet sheet = workbook.createSheet(todayName);
       workbook.setSheetOrder(todayName, 0);
 
-      // Keep at most 5 sheets — remove oldest (last in list) until within limit
-      while (workbook.getNumberOfSheets() > 5) {
-        workbook.removeSheetAt(workbook.getNumberOfSheets() - 1);
+      // Keep at most 5 current-prices sheets — history sheets (yyyy-MM) are never pruned
+      List<Integer> currentPricesIndices = new ArrayList<>();
+      for (int idx = 0; idx < workbook.getNumberOfSheets(); idx++) {
+        if (CURRENT_PRICES_SHEET.matcher(workbook.getSheetName(idx)).matches()) {
+          currentPricesIndices.add(idx);
+        }
+      }
+      while (currentPricesIndices.size() > 4) {
+        workbook.removeSheetAt(currentPricesIndices.remove(currentPricesIndices.size() - 1));
       }
 
       Row headerRow = sheet.createRow(0);
@@ -159,11 +181,84 @@ public class ExcelServiceImpl implements ExcelService {
       }
     }
 
+    writeHistory(workbook, sorted);
+
     outputFile.getParentFile().mkdirs();
     try (FileOutputStream fos = new FileOutputStream(outputFile)) {
       workbook.write(fos);
     }
     workbook.close();
+  }
+
+  private void writeHistory(Workbook workbook, List<Quote> quotes) {
+    String monthName = LocalDate.now().format(MONTH_FORMATTER);
+    String today = LocalDate.now().format(DATE_FORMATTER);
+    CellStyle histHeaderStyle = buildHistoryHeaderStyle(workbook);
+    CellStyle priceNumStyle = buildPriceStyle(workbook, IndexedColors.WHITE);
+
+    Sheet sheet = workbook.getSheet(monthName);
+    if (sheet == null) {
+      sheet = workbook.createSheet(monthName);
+      // History sheets live after all current-prices sheets
+      Row headerRow = sheet.createRow(0);
+      for (int i = 0; i < HISTORY_HEADERS.length; i++) {
+        Cell cell = headerRow.createCell(i);
+        cell.setCellValue(HISTORY_HEADERS[i]);
+        cell.setCellStyle(histHeaderStyle);
+      }
+      sheet.createFreezePane(0, 1);
+    }
+
+    // Build upsert map: "date|ticker" -> row index
+    Map<String, Integer> rowByKey = new HashMap<>();
+    for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+      Row row = sheet.getRow(i);
+      if (row == null) continue;
+      Cell dateCell = row.getCell(HCOL_DATE);
+      Cell tickerCell = row.getCell(HCOL_TICKER);
+      if (dateCell != null && tickerCell != null) {
+        rowByKey.put(dateCell.getStringCellValue() + "|" + tickerCell.getStringCellValue(), i);
+      }
+    }
+
+    for (Quote quote : quotes) {
+      String key = today + "|" + quote.getTickerOrId();
+      Integer existingRow = rowByKey.get(key);
+      Row row;
+      if (existingRow != null) {
+        row = sheet.getRow(existingRow);
+      } else {
+        row = sheet.createRow(sheet.getLastRowNum() + 1);
+        row.createCell(HCOL_DATE).setCellValue(today);
+        row.createCell(HCOL_PROVIDER)
+            .setCellValue(quote.getProviderName() != null ? quote.getProviderName() : "");
+        row.createCell(HCOL_NAME).setCellValue(quote.getName());
+        row.createCell(HCOL_TICKER).setCellValue(quote.getTickerOrId());
+        row.createCell(HCOL_CURRENCY).setCellValue(quote.getCurrency());
+        rowByKey.put(key, row.getRowNum());
+      }
+      Cell priceCell = row.getCell(HCOL_PRICE);
+      if (priceCell == null) priceCell = row.createCell(HCOL_PRICE);
+      priceCell.setCellValue(quote.getPrice().doubleValue());
+      priceCell.setCellStyle(priceNumStyle);
+    }
+
+    for (int col = 0; col < HISTORY_HEADERS.length; col++) {
+      sheet.autoSizeColumn(col);
+    }
+  }
+
+  private CellStyle buildHistoryHeaderStyle(Workbook workbook) {
+    CellStyle style = workbook.createCellStyle();
+    Font font = workbook.createFont();
+    font.setBold(true);
+    font.setColor(IndexedColors.WHITE.getIndex());
+    style.setFont(font);
+    style.setFillForegroundColor(IndexedColors.DARK_TEAL.getIndex());
+    style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+    style.setAlignment(HorizontalAlignment.CENTER);
+    style.setBorderBottom(BorderStyle.THIN);
+    return style;
   }
 
   private CellStyle priceStyleFor(
