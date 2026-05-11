@@ -207,6 +207,7 @@ public class ExcelServiceImpl implements ExcelService {
         cell.setCellStyle(histHeaderStyle);
       }
       sheet.createFreezePane(0, 1);
+      sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, HISTORY_HEADERS.length - 1));
     }
 
     // Build upsert map: "date|ticker" -> row index

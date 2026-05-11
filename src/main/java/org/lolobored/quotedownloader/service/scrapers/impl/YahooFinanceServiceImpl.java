@@ -34,8 +34,7 @@ public class YahooFinanceServiceImpl implements YahooFinanceService {
     return false;
   }
 
-  @Override
-  public List<Quote> fetchQuotes(WebDriver ignored, Provider provider) throws Exception {
+  protected WebDriver createDriver() {
     ChromeOptions opts = new ChromeOptions();
     opts.addArguments(
         "--headless=new",
@@ -45,8 +44,12 @@ public class YahooFinanceServiceImpl implements YahooFinanceService {
         "--disable-features=FedCm,FedCmWithoutWellKnownEnforcement",
         "--incognito");
     opts.setPageLoadStrategy(PageLoadStrategy.NONE);
+    return new ChromeDriver(opts);
+  }
 
-    WebDriver driver = new ChromeDriver(opts);
+  @Override
+  public List<Quote> fetchQuotes(WebDriver ignored, Provider provider) throws Exception {
+    WebDriver driver = createDriver();
     try {
       List<Quote> quotes = new ArrayList<>();
       for (Fund fund : provider.getFunds()) {
