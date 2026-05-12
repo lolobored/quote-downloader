@@ -187,15 +187,42 @@ class ExcelServiceImplTest {
   }
 
   @Test
+  void writeQuotes_newMonth_priceColourFromPreviousSheet() throws Exception {
+    service.writeQuotes(quotes(58.77), providers(), outputFile);
+    // Simulate the workbook belonging to a previous month
+    renameSheet(thisMonth, "2000-01");
+    // First run of the new month — should compare against 2000-01 for colour
+    service.writeQuotes(quotes(59.00), providers(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      // Price went up: expect green (LIGHT_GREEN fill index)
+      short fillIndex = hist.getRow(1).getCell(4).getCellStyle().getFillForegroundColor();
+      assertThat(fillIndex)
+          .isEqualTo(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_GREEN.getIndex());
+    }
+  }
+
+  @Test
   void writeQuotes_preservesPreviousMonthSheet() throws Exception {
     service.writeQuotes(quotes(), providers(), outputFile);
-    // Simulate a new month by renaming the current month sheet
     renameSheet(thisMonth, "2000-01");
     service.writeQuotes(quotes(), providers(), outputFile);
 
     try (Workbook wb = open(outputFile)) {
       assertThat(wb.getSheet("2000-01")).isNotNull();
       assertThat(wb.getSheet(thisMonth)).isNotNull();
+    }
+  }
+
+  @Test
+  void writeQuotes_newMonthSheet_insertedAtLeft() throws Exception {
+    service.writeQuotes(quotes(), providers(), outputFile);
+    renameSheet(thisMonth, "2000-01");
+    service.writeQuotes(quotes(), providers(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      assertThat(wb.getSheetName(0)).isEqualTo(thisMonth);
     }
   }
 

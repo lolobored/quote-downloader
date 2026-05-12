@@ -83,6 +83,7 @@ public class ExcelServiceImpl implements ExcelService {
     Sheet sheet = workbook.getSheet(monthName);
     if (sheet == null) {
       sheet = workbook.createSheet(monthName);
+      workbook.setSheetOrder(monthName, 0);
       Row headerRow = sheet.createRow(0);
       for (int i = 0; i < HISTORY_HEADERS.length; i++) {
         Cell cell = headerRow.createCell(i);
@@ -113,6 +114,23 @@ public class ExcelServiceImpl implements ExcelService {
         todayRowsExist = true;
       } else {
         lastPriceByTicker.putIfAbsent(ticker, priceCell.getNumericCellValue());
+      }
+    }
+
+    // On the first run of a new month the current sheet has no previous prices.
+    // Fall back to the most recent previous month's sheet so price colours still work.
+    if (lastPriceByTicker.isEmpty()) {
+      Sheet prev = mostRecentSheet(workbook, monthName);
+      if (prev != null) {
+        for (int i = 1; i <= prev.getLastRowNum(); i++) {
+          Row row = prev.getRow(i);
+          if (row == null) continue;
+          Cell tickerCell = row.getCell(HCOL_TICKER);
+          Cell priceCell = row.getCell(HCOL_PRICE);
+          if (tickerCell == null || priceCell == null) continue;
+          lastPriceByTicker.putIfAbsent(
+              tickerCell.getStringCellValue(), priceCell.getNumericCellValue());
+        }
       }
     }
 
@@ -236,6 +254,19 @@ public class ExcelServiceImpl implements ExcelService {
         });
 
     return quotes;
+  }
+
+  private Sheet mostRecentSheet(Workbook workbook, String excludeName) {
+    String best = null;
+    for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+      String name = workbook.getSheetName(i);
+      if (!name.equals(excludeName) && name.matches("\\d{4}-\\d{2}")) {
+        if (best == null || name.compareTo(best) > 0) {
+          best = name;
+        }
+      }
+    }
+    return best != null ? workbook.getSheet(best) : null;
   }
 
   private void applyBottomBorder(Sheet sheet, int rowIndex, BorderStyle style) {

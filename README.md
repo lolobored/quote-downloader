@@ -96,10 +96,10 @@ Visual structure within each sheet:
 - **Provider column** — consecutive rows sharing the same provider are merged into one cell, centred and highlighted in light blue
 - **Provider separator** — a thin horizontal line between provider groups within the same day
 - **Day separator** — a medium horizontal line between each day's block and the one below it
-- **Price colour** — green background when the price is up vs the previous day, red when down
+- **Price colour** — green background when the price is up vs the previous day, red when down; on the first run of a new month the previous month's sheet is used for comparison so colours are never lost at month boundaries
 - **Autofilter** on all columns — slice by provider, fund, or date range directly in Excel
 
-Running multiple times on the same day **updates** the existing rows rather than adding duplicates. Funds added or removed from the config simply appear or stop appearing in future runs.
+Each new month's sheet is created as the **leftmost tab** so the current month is always immediately visible. Running multiple times on the same day **updates** the existing rows rather than adding duplicates. Funds added or removed from the config simply appear or stop appearing in future runs.
 
 ## Building from source
 
