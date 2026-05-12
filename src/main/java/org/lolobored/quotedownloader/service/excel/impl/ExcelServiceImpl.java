@@ -234,6 +234,12 @@ public class ExcelServiceImpl implements ExcelService {
     for (int col = 0; col < HISTORY_HEADERS.length; col++) {
       sheet.autoSizeColumn(col);
     }
+    // autoSizeColumn ignores merged cells — the date column (yyyy-MM-dd = 10 chars) always needs
+    // a fixed minimum width; 256 units ≈ 1 character in the default font
+    int dateColWidth = 12 * 256;
+    if (sheet.getColumnWidth(HCOL_DATE) < dateColWidth) {
+      sheet.setColumnWidth(HCOL_DATE, dateColWidth);
+    }
   }
 
   private List<Quote> sort(List<Quote> quotes, List<Provider> providers) {
