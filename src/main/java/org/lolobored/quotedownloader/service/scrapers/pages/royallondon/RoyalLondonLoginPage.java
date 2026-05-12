@@ -121,17 +121,38 @@ public class RoyalLondonLoginPage {
     }
 
     driver.get(url);
+
+    // Cookies may land us directly on EService or on the login-choice intermediate page
     try {
       new WebDriverWait(driver, OPTIONAL_WAIT)
-          .until(ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT));
-      logger.info("Session restored from saved cookies — login and OTP skipped");
-      return true;
+          .until(
+              ExpectedConditions.or(
+                  ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT),
+                  ExpectedConditions.urlContains("login-choice")));
     } catch (TimeoutException e) {
       logger.info(
           "Saved cookies did not restore session — proceeding with login"
               + " (device trust cookie may still skip OTP)");
+      driver.manage().deleteAllCookies();
+      driver.get(url);
       return false;
     }
+
+    if (driver.getCurrentUrl().contains("login-choice")) {
+      logger.info("Cookies landed on login-choice page — clicking Continue");
+      try {
+        wait.until(ExpectedConditions.elementToBeClickable(CONTINUE_BUTTON)).click();
+        wait.until(ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT));
+      } catch (TimeoutException e) {
+        logger.info("Could not proceed from login-choice — falling back to full login");
+        driver.manage().deleteAllCookies();
+        driver.get(url);
+        return false;
+      }
+    }
+
+    logger.info("Session restored from saved cookies — login and OTP skipped");
+    return true;
   }
 
   private String readOtpFromFile() throws InterruptedException {
