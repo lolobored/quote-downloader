@@ -76,9 +76,7 @@ public class ExcelServiceImpl implements ExcelService {
     String today = LocalDate.now().format(DATE_FORMATTER);
     CellStyle headerStyle = buildHeaderStyle(workbook);
     CellStyle providerStyle = buildProviderStyle(workbook);
-    CellStyle priceStyle = buildPriceStyle(workbook, IndexedColors.AUTOMATIC);
-    CellStyle priceUpStyle = buildPriceStyle(workbook, IndexedColors.LIGHT_GREEN);
-    CellStyle priceDownStyle = buildPriceStyle(workbook, IndexedColors.ROSE);
+    short priceDataFormat = workbook.createDataFormat().getFormat("#,##0.0000");
 
     Sheet sheet = workbook.getSheet(monthName);
     if (sheet == null) {
@@ -186,6 +184,18 @@ public class ExcelServiceImpl implements ExcelService {
         i = j;
       }
 
+      // Merge date column for today's batch
+      if (quotes.size() > 1) {
+        sheet.addMergedRegion(new CellRangeAddress(1, quotes.size(), HCOL_DATE, HCOL_DATE));
+      }
+      Cell firstDateCell = sheet.getRow(1).getCell(HCOL_DATE);
+      if (firstDateCell != null) {
+        CellUtil.setCellStyleProperty(
+            firstDateCell, CellUtil.ALIGNMENT, HorizontalAlignment.CENTER);
+        CellUtil.setCellStyleProperty(
+            firstDateCell, CellUtil.VERTICAL_ALIGNMENT, VerticalAlignment.CENTER);
+      }
+
       // Medium separator between today's batch and the previous day's rows
       if (hadExistingRows) {
         applyBottomBorder(sheet, quotes.size(), BorderStyle.MEDIUM);
@@ -205,14 +215,19 @@ public class ExcelServiceImpl implements ExcelService {
       priceCell.setCellValue(newPrice);
 
       Double prev = lastPriceByTicker.get(quote.getTickerOrId());
-      if (prev == null) {
-        priceCell.setCellStyle(priceStyle);
-      } else if (newPrice > prev) {
-        priceCell.setCellStyle(priceUpStyle);
-      } else if (newPrice < prev) {
-        priceCell.setCellStyle(priceDownStyle);
+      CellUtil.setCellStyleProperty(priceCell, CellUtil.DATA_FORMAT, priceDataFormat);
+      if (prev != null && newPrice > prev) {
+        CellUtil.setCellStyleProperty(
+            priceCell, CellUtil.FILL_PATTERN, FillPatternType.SOLID_FOREGROUND);
+        CellUtil.setCellStyleProperty(
+            priceCell, CellUtil.FILL_FOREGROUND_COLOR, IndexedColors.LIGHT_GREEN.getIndex());
+      } else if (prev != null && newPrice < prev) {
+        CellUtil.setCellStyleProperty(
+            priceCell, CellUtil.FILL_PATTERN, FillPatternType.SOLID_FOREGROUND);
+        CellUtil.setCellStyleProperty(
+            priceCell, CellUtil.FILL_FOREGROUND_COLOR, IndexedColors.ROSE.getIndex());
       } else {
-        priceCell.setCellStyle(priceStyle);
+        CellUtil.setCellStyleProperty(priceCell, CellUtil.FILL_PATTERN, FillPatternType.NO_FILL);
       }
     }
 
@@ -301,16 +316,6 @@ public class ExcelServiceImpl implements ExcelService {
     style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
     style.setAlignment(HorizontalAlignment.CENTER);
     style.setVerticalAlignment(VerticalAlignment.CENTER);
-    return style;
-  }
-
-  private CellStyle buildPriceStyle(Workbook workbook, IndexedColors background) {
-    CellStyle style = workbook.createCellStyle();
-    style.setDataFormat(workbook.createDataFormat().getFormat("#,##0.0000"));
-    if (background != IndexedColors.AUTOMATIC) {
-      style.setFillForegroundColor(background.getIndex());
-      style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-    }
     return style;
   }
 }

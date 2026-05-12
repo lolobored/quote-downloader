@@ -14,7 +14,6 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -143,18 +142,78 @@ class ExcelServiceImplTest {
   }
 
   @Test
+  void writeQuotes_mergesDateCellsForSameDayBatch() throws Exception {
+    service.writeQuotes(twoQuotesSameProvider(), providersWithTwoFunds(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      boolean hasDateMerge =
+          hist.getMergedRegions().stream()
+              .anyMatch(
+                  r ->
+                      r.getFirstRow() == 1
+                          && r.getLastRow() == 2
+                          && r.getFirstColumn() == 0
+                          && r.getLastColumn() == 0);
+      assertThat(hasDateMerge).isTrue();
+    }
+  }
+
+  @Test
+  void writeQuotes_sortsProvidersByConfigOrder() throws Exception {
+    // Quotes arrive in reverse order: great eastern before yahoo
+    Quote q1 =
+        new Quote("GreatLink Fund", "GEV001", BigDecimal.valueOf(0.89), "SGD", LocalDate.now());
+    q1.setProviderName("great eastern");
+    Quote q2 =
+        new Quote(
+            "DBS Group Holdings", "D05.SI", BigDecimal.valueOf(58.77), "SGD", LocalDate.now());
+    q2.setProviderName("yahoo");
+
+    service.writeQuotes(List.of(q1, q2), twoProviders(), outputFile); // yahoo is first in config
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(1).getStringCellValue()).isEqualTo("yahoo");
+      assertThat(hist.getRow(2).getCell(1).getStringCellValue()).isEqualTo("great eastern");
+    }
+  }
+
+  @Test
+  void writeQuotes_sortsFundsWithinProviderByConfigOrder() throws Exception {
+    // Quotes arrive in reverse fund order: O39.SI before D05.SI
+    Quote q1 = new Quote("OCBC Bank", "O39.SI", BigDecimal.valueOf(15.50), "SGD", LocalDate.now());
+    q1.setProviderName("yahoo");
+    Quote q2 =
+        new Quote(
+            "DBS Group Holdings", "D05.SI", BigDecimal.valueOf(58.77), "SGD", LocalDate.now());
+    q2.setProviderName("yahoo");
+
+    service.writeQuotes(
+        List.of(q1, q2), providersWithTwoFunds(), outputFile); // D05.SI first in config
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(3).getStringCellValue()).isEqualTo("D05.SI");
+      assertThat(hist.getRow(2).getCell(3).getStringCellValue()).isEqualTo("O39.SI");
+    }
+  }
+
+  @Test
   void writeQuotes_mergesProviderCellsForSameProvider() throws Exception {
     service.writeQuotes(twoQuotesSameProvider(), providersWithTwoFunds(), outputFile);
 
     try (Workbook wb = open(outputFile)) {
       Sheet hist = wb.getSheet(thisMonth);
-      List<CellRangeAddress> merged = hist.getMergedRegions();
-      assertThat(merged).hasSize(1);
-      CellRangeAddress region = merged.get(0);
-      assertThat(region.getFirstRow()).isEqualTo(1);
-      assertThat(region.getLastRow()).isEqualTo(2);
-      assertThat(region.getFirstColumn()).isEqualTo(1);
-      assertThat(region.getLastColumn()).isEqualTo(1);
+      boolean hasProviderMerge =
+          hist.getMergedRegions().stream()
+              .anyMatch(
+                  r ->
+                      r.getFirstRow() == 1
+                          && r.getLastRow() == 2
+                          && r.getFirstColumn() == 1
+                          && r.getLastColumn() == 1);
+      assertThat(hasProviderMerge).isTrue();
     }
   }
 
@@ -168,6 +227,32 @@ class ExcelServiceImplTest {
           .isEqualTo(BorderStyle.THIN);
       assertThat(hist.getRow(2).getCell(0).getCellStyle().getBorderBottom())
           .isNotEqualTo(BorderStyle.THIN);
+    }
+  }
+
+  @Test
+  void writeQuotes_priceColumnPreservesBorderBetweenProviders() throws Exception {
+    service.writeQuotes(twoQuotesDifferentProviders(), twoProviders(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(4).getCellStyle().getBorderBottom())
+          .isEqualTo(BorderStyle.THIN);
+    }
+  }
+
+  @Test
+  void writeQuotes_priceColumnPreservesBorderBetweenDays() throws Exception {
+    String yesterday =
+        LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+    service.writeQuotes(quotes(58.77), providers(), outputFile);
+    overwriteDateInHistory(yesterday);
+    service.writeQuotes(quotes(59.00), providers(), outputFile);
+
+    try (Workbook wb = open(outputFile)) {
+      Sheet hist = wb.getSheet(thisMonth);
+      assertThat(hist.getRow(1).getCell(4).getCellStyle().getBorderBottom())
+          .isEqualTo(BorderStyle.MEDIUM);
     }
   }
 
