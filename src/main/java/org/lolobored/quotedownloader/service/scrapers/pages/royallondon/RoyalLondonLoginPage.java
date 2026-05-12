@@ -2,10 +2,8 @@ package org.lolobored.quotedownloader.service.scrapers.pages.royallondon;
 
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import org.lolobored.quotedownloader.service.otp.OtpGate;
 import org.openqa.selenium.By;
-import org.openqa.selenium.Cookie;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
@@ -48,7 +46,6 @@ public class RoyalLondonLoginPage {
   private final WebDriver driver;
   private final WebDriverWait wait;
   private final OtpGate otpGate;
-  private final RoyalLondonCookieStore cookieStore = new RoyalLondonCookieStore();
 
   public RoyalLondonLoginPage(WebDriver driver, int waitSeconds, OtpGate otpGate) {
     this.driver = driver;
@@ -58,20 +55,15 @@ public class RoyalLondonLoginPage {
 
   public void login(String url, String username, String password) throws InterruptedException {
     driver.get(url);
-    dismissCookieConsentIfPresent();
-
-    // Inject saved cookies and check if session is still active — skips everything if valid
-    if (tryRestoreSession(url)) {
-      return;
-    }
 
     wait.until(ExpectedConditions.visibilityOfElementLocated(USERNAME_FIELD)).sendKeys(username);
     wait.until(ExpectedConditions.visibilityOfElementLocated(PASSWORD_FIELD)).sendKeys(password);
+    dismissCookieConsentIfPresent();
     jsClick(SUBMIT_BUTTON);
 
     WebDriverWait shortWait = new WebDriverWait(driver, OPTIONAL_WAIT);
 
-    // Optional SMS MFA step — skipped when the device trust cookie is present in the browser
+    // Optional SMS MFA step (skipped when device is remembered)
     try {
       shortWait.until(ExpectedConditions.visibilityOfElementLocated(OTP_FIELD));
       String otpCode = readOtpFromFile();
@@ -102,57 +94,6 @@ public class RoyalLondonLoginPage {
 
     wait.until(ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT));
     logger.info("Royal London login successful");
-
-    // Persist cookies so future runs can skip the session and/or OTP step
-    cookieStore.save(driver.manage().getCookies());
-  }
-
-  private boolean tryRestoreSession(String url) {
-    List<Cookie> saved = cookieStore.load();
-    if (saved.isEmpty()) return false;
-
-    logger.info("Found {} saved Royal London cookies — attempting session restore", saved.size());
-    for (Cookie c : saved) {
-      try {
-        driver.manage().addCookie(c);
-      } catch (Exception e) {
-        logger.debug("Skipped cookie '{}' ({})", c.getName(), e.getMessage());
-      }
-    }
-
-    driver.get(url);
-
-    // Cookies may land us directly on EService or on the login-choice intermediate page
-    try {
-      new WebDriverWait(driver, OPTIONAL_WAIT)
-          .until(
-              ExpectedConditions.or(
-                  ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT),
-                  ExpectedConditions.urlContains("login-choice")));
-    } catch (TimeoutException e) {
-      logger.info(
-          "Saved cookies did not restore session — proceeding with login"
-              + " (device trust cookie may still skip OTP)");
-      driver.manage().deleteAllCookies();
-      driver.get(url);
-      return false;
-    }
-
-    if (driver.getCurrentUrl().contains("login-choice")) {
-      logger.info("Cookies landed on login-choice page — clicking Continue");
-      try {
-        wait.until(ExpectedConditions.elementToBeClickable(CONTINUE_BUTTON)).click();
-        wait.until(ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT));
-      } catch (TimeoutException e) {
-        logger.info("Could not proceed from login-choice — falling back to full login");
-        driver.manage().deleteAllCookies();
-        driver.get(url);
-        return false;
-      }
-    }
-
-    logger.info("Session restored from saved cookies — login and OTP skipped");
-    return true;
   }
 
   private String readOtpFromFile() throws InterruptedException {
