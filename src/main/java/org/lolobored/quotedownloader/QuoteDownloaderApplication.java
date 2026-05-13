@@ -58,9 +58,17 @@ public class QuoteDownloaderApplication implements ApplicationRunner {
   private static final int SAFARI_BROWSER = 2;
 
   private final Logger logger = LoggerFactory.getLogger(QuoteDownloaderApplication.class);
+  private volatile WebDriver activeDriver;
 
   public static void main(String[] args) {
-    SpringApplication.run(QuoteDownloaderApplication.class, args);
+    var ctx = SpringApplication.run(QuoteDownloaderApplication.class, args);
+    var app = ctx.getBean(QuoteDownloaderApplication.class);
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread(
+                () -> {
+                  if (app.activeDriver != null) app.activeDriver.quit();
+                }));
   }
 
   @Override
@@ -143,19 +151,20 @@ public class QuoteDownloaderApplication implements ApplicationRunner {
       }
 
       final boolean finalHeaded = headed;
-      WebDriver driver =
+      activeDriver =
           service.requiresWebDriver() ? createWebDriver(finalBrowserType, finalHeaded) : null;
       try {
-        List<Quote> providerQuotes = service.fetchQuotes(driver, provider);
+        List<Quote> providerQuotes = service.fetchQuotes(activeDriver, provider);
         quotes.addAll(providerQuotes);
       } catch (Exception e) {
-        if (driver != null)
-          saveErrorScreenshot(driver, provider.getName(), finalScreenshotsDirectory);
+        if (activeDriver != null)
+          saveErrorScreenshot(activeDriver, provider.getName(), finalScreenshotsDirectory);
         String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
         failures.add(provider.getName() + ": " + msg);
         logger.error("Provider [{}] failed", provider.getName(), e);
       } finally {
-        if (driver != null) driver.quit();
+        if (activeDriver != null) activeDriver.quit();
+        activeDriver = null;
       }
     }
 
