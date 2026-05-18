@@ -20,10 +20,13 @@ public class RoyalLondonLoginPage {
   // OpenAM callback fields — stable naming on this portal
   private static final By USERNAME_FIELD = By.name("callback_3");
   private static final By PASSWORD_FIELD = By.name("callback_4");
-  // SMS MFA code field (optional — only shown when device not remembered)
-  private static final By OTP_FIELD = By.name("callback_7");
+  // SMS MFA code field — try the legacy OpenAM callback name first, fall back to placeholder
+  private static final By OTP_FIELD_CALLBACK = By.name("callback_7");
+  private static final By OTP_FIELD_PLACEHOLDER = By.cssSelector("input[placeholder*='digit']");
   // Reused submit button id across credential, MFA, and remember-device pages
   private static final By SUBMIT_BUTTON = By.id("loginButton_0");
+  // "Next" button used on the OTP page when the portal has been redesigned
+  private static final By NEXT_BUTTON = By.xpath("//button[normalize-space(text())='Next']");
 
   // "Remember my device" intermediate page (appears after MFA, before login-choice)
   private static final By REMEMBER_DEVICE_HEADING =
@@ -41,7 +44,7 @@ public class RoyalLondonLoginPage {
       By.xpath("//button[normalize-space(text())='Accept all']");
 
   // Short timeout for optional steps — long enough for page transitions, short enough not to block
-  private static final Duration OPTIONAL_WAIT = Duration.ofSeconds(8);
+  private static final Duration OPTIONAL_WAIT = Duration.ofSeconds(15);
 
   private final WebDriver driver;
   private final WebDriverWait wait;
@@ -62,16 +65,14 @@ public class RoyalLondonLoginPage {
     jsClick(SUBMIT_BUTTON);
 
     WebDriverWait shortWait = new WebDriverWait(driver, OPTIONAL_WAIT);
-
     // Optional SMS MFA step (skipped when device is remembered)
-    try {
-      shortWait.until(ExpectedConditions.visibilityOfElementLocated(OTP_FIELD));
+    logger.info("Checking for SMS MFA step (current URL: {})", driver.getCurrentUrl());
+    WebElement otpField = findOtpField();
+    if (otpField != null) {
       String otpCode = readOtpFromFile();
-      driver.findElement(OTP_FIELD).sendKeys(otpCode);
-      jsClick(SUBMIT_BUTTON);
+      otpField.sendKeys(otpCode);
+      submitOtpPage();
       logger.info("Royal London MFA code submitted");
-    } catch (TimeoutException e) {
-      logger.debug("No SMS MFA step, continuing");
     }
 
     // Optional "Remember my device" step — accept so the server marks this device as trusted
@@ -94,6 +95,59 @@ public class RoyalLondonLoginPage {
 
     wait.until(ExpectedConditions.urlContains(ESERVICE_URL_FRAGMENT));
     logger.info("Royal London login successful");
+  }
+
+  private WebElement findOtpField() {
+    // Wait for the page to finish transitioning: either an input re-appears (OTP form) or
+    // the URL moves forward (device remembered, no OTP needed).
+    try {
+      new WebDriverWait(driver, OPTIONAL_WAIT)
+          .until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("input")));
+    } catch (TimeoutException e) {
+      logger.info("No inputs appeared after credential submit — no MFA step");
+      return null;
+    }
+
+    // Log all inputs now visible so we can diagnose selector mismatches in the future
+    try {
+      Object inputs =
+          ((JavascriptExecutor) driver)
+              .executeScript(
+                  "return Array.from(document.querySelectorAll('input')).map(i => "
+                      + "({name: i.name, id: i.id, type: i.type, placeholder: i.placeholder}));");
+      logger.info("Inputs on page after page transition: {}", inputs);
+    } catch (Exception e) {
+      logger.debug("Could not enumerate inputs: {}", e.getMessage());
+    }
+
+    // Try selectors: callback_6 (current), legacy callback_7/callback_0, any visible text input
+    for (By selector :
+        java.util.List.of(
+            By.name("callback_6"),
+            By.name("callback_0"),
+            OTP_FIELD_CALLBACK,
+            By.cssSelector("input[type='text']"))) {
+      try {
+        WebElement field =
+            new WebDriverWait(driver, Duration.ofSeconds(3))
+                .until(ExpectedConditions.presenceOfElementLocated(selector));
+        logger.info("Royal London OTP field found via: {}", selector);
+        return field;
+      } catch (TimeoutException ignored) {
+        // try next
+      }
+    }
+    logger.info("No SMS MFA step detected, continuing");
+    return null;
+  }
+
+  private void submitOtpPage() {
+    try {
+      jsClick(SUBMIT_BUTTON);
+    } catch (TimeoutException e) {
+      logger.debug("loginButton_0 not found, trying Next button");
+      jsClick(NEXT_BUTTON);
+    }
   }
 
   private String readOtpFromFile() throws InterruptedException {
