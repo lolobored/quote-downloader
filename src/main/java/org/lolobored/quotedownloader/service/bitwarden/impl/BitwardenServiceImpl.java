@@ -31,10 +31,12 @@ public class BitwardenServiceImpl implements BitwardenService {
             : "unknown";
 
     switch (status) {
-      case "unauthenticated" -> throw new RuntimeException(
-          "You are not logged in to Bitwarden. Please run 'bw login' in your terminal first.");
-      case "locked" -> throw new RuntimeException(
-          "Your Bitwarden vault is locked. Please run 'export BW_SESSION=$(bw unlock --raw)' before starting the application.");
+      case "unauthenticated" ->
+          throw new RuntimeException(
+              "You are not logged in to Bitwarden. Please run 'bw login' in your terminal first.");
+      case "locked" ->
+          throw new RuntimeException(
+              "Your Bitwarden vault is locked. Please run 'export BW_SESSION=$(bw unlock --raw)' before starting the application.");
       case "unlocked" -> logger.info("Bitwarden vault is unlocked.");
       default -> logger.warn("Could not determine Bitwarden vault status — proceeding anyway.");
     }
