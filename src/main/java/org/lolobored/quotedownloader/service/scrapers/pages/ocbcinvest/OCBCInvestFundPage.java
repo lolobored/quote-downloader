@@ -89,6 +89,16 @@ public class OCBCInvestFundPage {
     // Wait for the portfolio block to load (MFE renders asynchronously)
     shortWait.until(ExpectedConditions.visibilityOfElementLocated(PORTFOLIO_BLOCK));
 
+    // Wait for async spinners to finish (slow connections leave CircularProgress visible)
+    try {
+      shortWait.until(
+          ExpectedConditions.invisibilityOfElementLocated(By.cssSelector("[role='progressbar']")));
+      logger.debug("Portfolio data loaded (no spinners visible)");
+    } catch (TimeoutException e) {
+      logger.warn(
+          "Spinners still visible after {}s — proceeding anyway", ELEMENT_WAIT.getSeconds());
+    }
+
     // Find the cursor row whose text matches the portfolio name (normalize whitespace)
     String normalizedTarget = portfolioName.trim().replaceAll("\\s+", " ");
     List<WebElement> rows = driver.findElements(PORTFOLIO_ROW);
