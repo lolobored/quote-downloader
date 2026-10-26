@@ -31,8 +31,8 @@ dependencies {
   implementation group: 'io.github.bonigarcia', name: 'webdrivermanager', version: '6.4.0'
   implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.22.4'
   implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.22.4'
-  implementation 'org.apache.poi:poi:5.5.1'
-  implementation 'org.apache.poi:poi-ooxml:5.5.1'
+  implementation 'org.apache.poi:poi:6.0.0'
+  implementation 'org.apache.poi:poi-ooxml:6.0.0'
   testImplementation 'org.springframework.boot:spring-boot-starter-test:4.1.2'
 }
 
