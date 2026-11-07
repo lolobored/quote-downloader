@@ -187,9 +187,12 @@ public class OCBCInvestFundPage {
     }
 
     if (!remaining.isEmpty()) {
+      List<String> pageFundNames = allFunds.stream().map(e -> (String) e.get("n")).toList();
       throw new RuntimeException(
           "Could not find funds on portfolio holdings page: "
               + remaining.keySet()
+              + ". Funds shown on the OCBC page: "
+              + pageFundNames
               + ". Verify fundId is a substring of the fund name shown on the OCBC page.");
     }
     return results;
